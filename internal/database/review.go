@@ -97,8 +97,8 @@ func CreateReviewEpisode(episode *models.ReviewEpisode) error {
 	defer dbMu.Unlock()
 
 	_, err := db.Exec(
-		"INSERT INTO review_episodes (id, projectId, userId, name, coverFileId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		episode.ID, episode.ProjectID, episode.UserID, episode.Name, episode.CoverFileID, episode.CreatedAt, episode.UpdatedAt,
+		"INSERT INTO review_episodes (id, projectId, userId, name, coverFileId, sortOrder, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		episode.ID, episode.ProjectID, episode.UserID, episode.Name, episode.CoverFileID, episode.SortOrder, episode.CreatedAt, episode.UpdatedAt,
 	)
 	return err
 }
@@ -109,7 +109,7 @@ func ListReviewEpisodes(projectID string) ([]models.ReviewEpisode, error) {
 	defer dbMu.RUnlock()
 
 	rows, err := db.Query(
-		"SELECT id, projectId, userId, name, coverFileId, createdAt, updatedAt FROM review_episodes WHERE projectId = ? ORDER BY createdAt DESC",
+		"SELECT id, projectId, userId, name, coverFileId, sortOrder, createdAt, updatedAt FROM review_episodes WHERE projectId = ? ORDER BY sortOrder ASC",
 		projectID,
 	)
 	if err != nil {
@@ -121,7 +121,7 @@ func ListReviewEpisodes(projectID string) ([]models.ReviewEpisode, error) {
 	for rows.Next() {
 		var e models.ReviewEpisode
 		var coverFileId sql.NullString
-		if err := rows.Scan(&e.ID, &e.ProjectID, &e.UserID, &e.Name, &coverFileId, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.ProjectID, &e.UserID, &e.Name, &coverFileId, &e.SortOrder, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if coverFileId.Valid {
@@ -151,9 +151,9 @@ func GetReviewEpisode(id string) (*models.ReviewEpisode, error) {
 	var e models.ReviewEpisode
 	var coverFileId sql.NullString
 	err := db.QueryRow(
-		"SELECT id, projectId, userId, name, coverFileId, createdAt, updatedAt FROM review_episodes WHERE id = ?",
+		"SELECT id, projectId, userId, name, coverFileId, sortOrder, createdAt, updatedAt FROM review_episodes WHERE id = ?",
 		id,
-	).Scan(&e.ID, &e.ProjectID, &e.UserID, &e.Name, &coverFileId, &e.CreatedAt, &e.UpdatedAt)
+	).Scan(&e.ID, &e.ProjectID, &e.UserID, &e.Name, &coverFileId, &e.SortOrder, &e.CreatedAt, &e.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -256,6 +256,38 @@ func UpdateStoryboardOrder(storyboardIDs []string) error {
 	for i, id := range storyboardIDs {
 		_, err := db.Exec(
 			"UPDATE review_storyboards SET sortOrder = ?, updatedAt = ? WHERE id = ?",
+			i, now, id,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetMaxEpisodeOrder 获取当前项目下单集的最大排序值
+func GetMaxEpisodeOrder(projectID string) int {
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+
+	var maxOrder int
+	// 使用 COALESCE 处理没有记录的情况，默认返回 -1
+	err := db.QueryRow("SELECT COALESCE(MAX(sortOrder), -1) FROM review_episodes WHERE projectId = ?", projectID).Scan(&maxOrder)
+	if err != nil {
+		return -1
+	}
+	return maxOrder
+}
+
+// UpdateEpisodeOrder 批量更新单集排序
+func UpdateEpisodeOrder(episodeIDs []string) error {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+
+	now := models.Now()
+	for i, id := range episodeIDs {
+		_, err := db.Exec(
+			"UPDATE review_episodes SET sortOrder = ?, updatedAt = ? WHERE id = ?",
 			i, now, id,
 		)
 		if err != nil {

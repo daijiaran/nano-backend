@@ -188,6 +188,7 @@ type ReviewEpisode struct {
 	Name            string `json:"name"`
 	CoverFileID     string `json:"coverFileId"`
 	StoryboardCount int    `gorm:"-" json:"storyboardCount"`
+	SortOrder       int    `json:"sortOrder"`
 	CreatedAt       int64  `json:"createdAt"`
 	UpdatedAt       int64  `json:"updatedAt"`
 }

@@ -167,9 +167,23 @@ func createTables() error {
 			userId TEXT NOT NULL,
 			name TEXT NOT NULL,
 			coverFileId TEXT,
+			sortOrder INTEGER NOT NULL,
 			createdAt INTEGER NOT NULL,
 			updatedAt INTEGER NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS temp_review_episodes (
+			id TEXT PRIMARY KEY,
+			projectId TEXT NOT NULL,
+			userId TEXT NOT NULL,
+			name TEXT NOT NULL,
+			coverFileId TEXT,
+			sortOrder INTEGER NOT NULL,
+			createdAt INTEGER NOT NULL,
+			updatedAt INTEGER NOT NULL
+		)`,
+		`INSERT OR IGNORE INTO temp_review_episodes SELECT id, projectId, userId, name, coverFileId, 0, createdAt, updatedAt FROM review_episodes`,
+		`DROP TABLE review_episodes`,
+		`ALTER TABLE temp_review_episodes RENAME TO review_episodes`,
 		`CREATE TABLE IF NOT EXISTS review_storyboards (
 			id TEXT PRIMARY KEY,
 			episodeId TEXT NOT NULL,

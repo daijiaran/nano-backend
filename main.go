@@ -183,6 +183,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	// 单集
 	review.Get("/projects/:projectId/episodes", handlers.ListReviewEpisodes)
 	review.Post("/projects/:projectId/episodes", handlers.CreateReviewEpisode)
+	review.Put("/episodes/reorder", handlers.ReorderEpisodes)
 	review.Get("/episodes/:id", handlers.GetReviewEpisode)
 	review.Put("/episodes/:id", handlers.UpdateReviewEpisode)
 

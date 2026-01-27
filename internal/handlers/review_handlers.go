@@ -115,6 +115,9 @@ func CreateReviewEpisode(c *fiber.Ctx) error {
 		}
 	}
 
+	// 获取当前最大排序值
+	maxOrder := database.GetMaxEpisodeOrder(projectID)
+
 	now := models.Now()
 	episode := &models.ReviewEpisode{
 		ID:          uuid.New().String(),
@@ -122,6 +125,7 @@ func CreateReviewEpisode(c *fiber.Ctx) error {
 		UserID:      user.ID,
 		Name:        name,
 		CoverFileID: coverFileID,
+		SortOrder:   maxOrder + 1,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -310,6 +314,37 @@ func ReorderStoryboards(c *fiber.Ctx) error {
 	// 批量更新排序
 	if err := database.UpdateStoryboardOrder(body.StoryboardIDs); err != nil {
 		log.Printf("[review] Error updating storyboard order: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "排序更新失败"})
+	}
+
+	return c.JSON(fiber.Map{"ok": true})
+}
+
+// ReorderEpisodes 单集排序
+func ReorderEpisodes(c *fiber.Ctx) error {
+	var body struct {
+		EpisodeIDs []string `json:"episodeIds"`
+	}
+
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "格式错误"})
+	}
+
+	if len(body.EpisodeIDs) == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "ID列表不能为空"})
+	}
+
+	// 简单的权限验证：检查这些单集是否存在
+	for _, id := range body.EpisodeIDs {
+		ep, err := database.GetReviewEpisode(id)
+		if err != nil || ep == nil {
+			return c.Status(404).JSON(fiber.Map{"error": "单集不存在或无权限访问"})
+		}
+	}
+
+	// 批量更新排序
+	if err := database.UpdateEpisodeOrder(body.EpisodeIDs); err != nil {
+		log.Printf("[review] Error updating episode order: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "排序更新失败"})
 	}
 
