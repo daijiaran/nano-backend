@@ -169,6 +169,48 @@ type Settings struct {
 	VideoTimeoutSeconds   int `json:"videoTimeoutSeconds"`
 }
 
+// --- 影视项目审阅系统模型 ---
+
+type ReviewProject struct {
+	ID           string `gorm:"primaryKey" json:"id"`
+	UserID       string `gorm:"index" json:"userId"` // 创建者
+	Name         string `json:"name"`
+	CoverFileID  string `json:"coverFileId"`           // 关联 File 表 ID
+	EpisodeCount int    `gorm:"-" json:"episodeCount"` // 动态计算或缓存
+	CreatedAt    int64  `json:"createdAt"`
+	UpdatedAt    int64  `json:"updatedAt"`
+}
+
+type ReviewEpisode struct {
+	ID              string `gorm:"primaryKey" json:"id"`
+	ProjectID       string `gorm:"index" json:"projectId"`
+	UserID          string `gorm:"index" json:"userId"`
+	Name            string `json:"name"`
+	CoverFileID     string `json:"coverFileId"`
+	StoryboardCount int    `gorm:"-" json:"storyboardCount"`
+	CreatedAt       int64  `json:"createdAt"`
+	UpdatedAt       int64  `json:"updatedAt"`
+}
+
+type ReviewStoryboard struct {
+	ID          string `gorm:"primaryKey" json:"id"`
+	EpisodeID   string `gorm:"index" json:"episodeId"`
+	UserID      string `gorm:"index" json:"userId"` // 创建者
+	Name        string `json:"name"`                // 分镜名称
+	ImageFileID string `json:"imageFileId"`         // 必须有图
+	Status      string `json:"status"`              // pending(未审阅), approved(通过), rejected(未通过)
+	Feedback    string `json:"feedback"`            // 修改建议
+	SortOrder   int    `json:"sortOrder"`           // 用于拖拽排序
+	CreatedAt   int64  `json:"createdAt"`
+	UpdatedAt   int64  `json:"updatedAt"`
+}
+
+// 响应结构体 (用于前端展示)
+type ReviewStoryboardResponse struct {
+	ReviewStoryboard
+	ImageURL string `json:"imageUrl"`
+}
+
 // --- 工具函数 ---
 
 func Now() int64 {

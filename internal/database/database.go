@@ -152,6 +152,35 @@ func createTables() error {
 			name TEXT NOT NULL,
 			createdAt INTEGER NOT NULL
 		)`,
+		/* 影视项目审阅系统表 */
+		`CREATE TABLE IF NOT EXISTS review_projects (
+			id TEXT PRIMARY KEY,
+			userId TEXT NOT NULL,
+			name TEXT NOT NULL,
+			coverFileId TEXT,
+			createdAt INTEGER NOT NULL,
+			updatedAt INTEGER NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS review_episodes (
+			id TEXT PRIMARY KEY,
+			projectId TEXT NOT NULL,
+			userId TEXT NOT NULL,
+			name TEXT NOT NULL,
+			coverFileId TEXT,
+			createdAt INTEGER NOT NULL,
+			updatedAt INTEGER NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS review_storyboards (
+			id TEXT PRIMARY KEY,
+			episodeId TEXT NOT NULL,
+			userId TEXT NOT NULL,
+			imageFileId TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			feedback TEXT,
+			sortOrder INTEGER NOT NULL,
+			createdAt INTEGER NOT NULL,
+			updatedAt INTEGER NOT NULL
+		)`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId)`,
 		`CREATE INDEX IF NOT EXISTS idx_generations_userId ON generations(userId)`,
 		`CREATE INDEX IF NOT EXISTS idx_files_userId ON files(userId)`,
@@ -159,6 +188,12 @@ func createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_library_userId ON library(userId)`,
 		`CREATE INDEX IF NOT EXISTS idx_reference_uploads_userId ON reference_uploads(userId)`,
 		`CREATE INDEX IF NOT EXISTS idx_video_runs_userId ON video_runs(userId)`,
+		/* 影视项目审阅系统索引 */
+		`CREATE INDEX IF NOT EXISTS idx_review_projects_userId ON review_projects(userId)`,
+		`CREATE INDEX IF NOT EXISTS idx_review_episodes_projectId ON review_episodes(projectId)`,
+		`CREATE INDEX IF NOT EXISTS idx_review_episodes_userId ON review_episodes(userId)`,
+		`CREATE INDEX IF NOT EXISTS idx_review_storyboards_episodeId ON review_storyboards(episodeId)`,
+		`CREATE INDEX IF NOT EXISTS idx_review_storyboards_userId ON review_storyboards(userId)`,
 	}
 
 	for _, q := range queries {

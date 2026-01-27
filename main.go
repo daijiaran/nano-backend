@@ -167,4 +167,29 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 
 	// Files (public - for provider to fetch reference images)
 	app.Get("/public/files/:id", handlers.GetPublicFile)
+
+	// Public file access for images in img tags
+	app.Get("/api/files/:id/preview", handlers.GetPublicFile)
+
+	// 影视项目审阅相关路由
+	review := app.Group("/api/review", authMiddleware)
+
+	// 项目
+	review.Get("/projects", handlers.ListReviewProjects)
+	review.Post("/projects", handlers.CreateReviewProject)
+	review.Get("/projects/:id", handlers.GetReviewProject)
+	review.Put("/projects/:id", handlers.UpdateReviewProject)
+
+	// 单集
+	review.Get("/projects/:projectId/episodes", handlers.ListReviewEpisodes)
+	review.Post("/projects/:projectId/episodes", handlers.CreateReviewEpisode)
+	review.Get("/episodes/:id", handlers.GetReviewEpisode)
+	review.Put("/episodes/:id", handlers.UpdateReviewEpisode)
+
+	// 分镜
+	review.Get("/episodes/:episodeId/storyboards", handlers.ListReviewStoryboards)
+	review.Post("/episodes/:episodeId/storyboards", handlers.CreateReviewStoryboard)
+	review.Put("/storyboards/reorder", handlers.ReorderStoryboards)
+	review.Patch("/storyboards/:id/status", handlers.ReviewStoryboard)
+	review.Put("/storyboards/:id", handlers.UpdateReviewStoryboard)
 }
