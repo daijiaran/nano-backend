@@ -56,9 +56,7 @@ func CreateReviewProject(c *fiber.Ctx) error {
 
 // ListReviewProjects 获取项目列表
 func ListReviewProjects(c *fiber.Ctx) error {
-	user := middleware.GetCurrentUser(c)
-
-	projects, err := database.ListReviewProjects(user.ID)
+	projects, err := database.ListReviewProjects()
 	if err != nil {
 		log.Printf("[review] Error listing projects: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -69,10 +67,9 @@ func ListReviewProjects(c *fiber.Ctx) error {
 
 // GetReviewProject 获取项目详情
 func GetReviewProject(c *fiber.Ctx) error {
-	user := middleware.GetCurrentUser(c)
 	id := c.Params("id")
 
-	project, err := database.GetReviewProject(id, user.ID)
+	project, err := database.GetReviewProject(id)
 	if err != nil {
 		log.Printf("[review] Error getting project: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -96,8 +93,8 @@ func CreateReviewEpisode(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "单集名称不能为空"})
 	}
 
-	// 验证项目归属
-	project, err := database.GetReviewProject(projectID, user.ID)
+	// 验证项目存在
+	project, err := database.GetReviewProject(projectID)
 	if err != nil {
 		log.Printf("[review] Error getting project: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -139,10 +136,9 @@ func CreateReviewEpisode(c *fiber.Ctx) error {
 
 // ListReviewEpisodes 获取单集列表
 func ListReviewEpisodes(c *fiber.Ctx) error {
-	user := middleware.GetCurrentUser(c)
 	projectID := c.Params("projectId")
 
-	episodes, err := database.ListReviewEpisodes(projectID, user.ID)
+	episodes, err := database.ListReviewEpisodes(projectID)
 	if err != nil {
 		log.Printf("[review] Error listing episodes: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -153,10 +149,9 @@ func ListReviewEpisodes(c *fiber.Ctx) error {
 
 // GetReviewEpisode 获取单集详情
 func GetReviewEpisode(c *fiber.Ctx) error {
-	user := middleware.GetCurrentUser(c)
 	id := c.Params("id")
 
-	episode, err := database.GetReviewEpisode(id, user.ID)
+	episode, err := database.GetReviewEpisode(id)
 	if err != nil {
 		log.Printf("[review] Error getting episode: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -177,7 +172,7 @@ func CreateReviewStoryboard(c *fiber.Ctx) error {
 	name := c.FormValue("name")
 
 	// 验证单集存在
-	episode, err := database.GetReviewEpisode(episodeID, user.ID)
+	episode, err := database.GetReviewEpisode(episodeID)
 	if err != nil {
 		log.Printf("[review] Error getting episode: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -227,11 +222,10 @@ func CreateReviewStoryboard(c *fiber.Ctx) error {
 
 // ListReviewStoryboards 获取分镜列表
 func ListReviewStoryboards(c *fiber.Ctx) error {
-	user := middleware.GetCurrentUser(c)
 	episodeID := c.Params("episodeId")
 	token := middleware.GetToken(c)
 
-	storyboards, err := database.ListReviewStoryboards(episodeID, user.ID)
+	storyboards, err := database.ListReviewStoryboards(episodeID)
 	if err != nil {
 		log.Printf("[review] Error listing storyboards: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -256,7 +250,6 @@ func ListReviewStoryboards(c *fiber.Ctx) error {
 
 // ReviewStoryboard 审阅/修改分镜状态
 func ReviewStoryboard(c *fiber.Ctx) error {
-	user := middleware.GetCurrentUser(c)
 	storyboardID := c.Params("id")
 
 	var body struct {
@@ -273,7 +266,7 @@ func ReviewStoryboard(c *fiber.Ctx) error {
 	}
 
 	// 验证权限
-	storyboard, err := database.GetReviewStoryboard(storyboardID, user.ID)
+	storyboard, err := database.GetReviewStoryboard(storyboardID)
 	if err != nil {
 		log.Printf("[review] Error getting storyboard: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -292,7 +285,6 @@ func ReviewStoryboard(c *fiber.Ctx) error {
 
 // ReorderStoryboards 分镜排序 (拖拽后调用)
 func ReorderStoryboards(c *fiber.Ctx) error {
-	user := middleware.GetCurrentUser(c)
 
 	// 接收一个有序的ID列表
 	var body struct {
@@ -309,7 +301,7 @@ func ReorderStoryboards(c *fiber.Ctx) error {
 
 	// 验证权限
 	for _, id := range body.StoryboardIDs {
-		storyboard, err := database.GetReviewStoryboard(id, user.ID)
+		storyboard, err := database.GetReviewStoryboard(id)
 		if err != nil || storyboard == nil {
 			return c.Status(404).JSON(fiber.Map{"error": "分镜不存在或无权限访问"})
 		}
@@ -335,7 +327,7 @@ func UpdateReviewProject(c *fiber.Ctx) error {
 	}
 
 	// 1. 获取原数据
-	existing, err := database.GetReviewProject(projectID, user.ID)
+	existing, err := database.GetReviewProject(projectID)
 	if err != nil {
 		log.Printf("[review] Error getting project: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -368,7 +360,7 @@ func UpdateReviewProject(c *fiber.Ctx) error {
 	}
 
 	// 5. 返回更新后的项目
-	updatedProject, err := database.GetReviewProject(projectID, user.ID)
+	updatedProject, err := database.GetReviewProject(projectID)
 	if err != nil {
 		log.Printf("[review] Error getting updated project: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -388,7 +380,7 @@ func UpdateReviewEpisode(c *fiber.Ctx) error {
 	}
 
 	// 1. 获取原数据
-	existing, err := database.GetReviewEpisode(episodeID, user.ID)
+	existing, err := database.GetReviewEpisode(episodeID)
 	if err != nil {
 		log.Printf("[review] Error getting episode: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -421,7 +413,7 @@ func UpdateReviewEpisode(c *fiber.Ctx) error {
 	}
 
 	// 5. 返回更新后的单集
-	updatedEpisode, err := database.GetReviewEpisode(episodeID, user.ID)
+	updatedEpisode, err := database.GetReviewEpisode(episodeID)
 	if err != nil {
 		log.Printf("[review] Error getting updated episode: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -441,7 +433,7 @@ func UpdateReviewStoryboard(c *fiber.Ctx) error {
 	}
 
 	// 1. 获取原数据
-	existing, err := database.GetReviewStoryboard(storyboardID, user.ID)
+	existing, err := database.GetReviewStoryboard(storyboardID)
 	if err != nil {
 		log.Printf("[review] Error getting storyboard: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
@@ -476,7 +468,7 @@ func UpdateReviewStoryboard(c *fiber.Ctx) error {
 	}
 
 	// 5. 返回更新后的分镜
-	updatedStoryboard, err := database.GetReviewStoryboard(storyboardID, user.ID)
+	updatedStoryboard, err := database.GetReviewStoryboard(storyboardID)
 	if err != nil {
 		log.Printf("[review] Error getting updated storyboard: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})

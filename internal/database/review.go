@@ -2,7 +2,6 @@ package database
 
 import (
 	"database/sql"
-	"fmt"
 
 	"nano-backend/internal/models"
 )
@@ -21,14 +20,13 @@ func CreateReviewProject(project *models.ReviewProject) error {
 	return err
 }
 
-// ListReviewProjects 获取用户的项目列表
-func ListReviewProjects(userID string) ([]models.ReviewProject, error) {
+// ListReviewProjects 获取所有项目列表 (移除 userID 参数)
+func ListReviewProjects() ([]models.ReviewProject, error) {
 	dbMu.RLock()
 	defer dbMu.RUnlock()
 
 	rows, err := db.Query(
-		"SELECT id, userId, name, coverFileId, createdAt, updatedAt FROM review_projects WHERE userId = ? ORDER BY createdAt DESC",
-		userID,
+		"SELECT id, userId, name, coverFileId, createdAt, updatedAt FROM review_projects ORDER BY createdAt DESC",
 	)
 	if err != nil {
 		return nil, err
@@ -61,16 +59,16 @@ func ListReviewProjects(userID string) ([]models.ReviewProject, error) {
 	return projects, nil
 }
 
-// GetReviewProject 获取单个项目详情
-func GetReviewProject(id, userID string) (*models.ReviewProject, error) {
+// GetReviewProject 获取单个项目详情 (移除 userID 参数)
+func GetReviewProject(id string) (*models.ReviewProject, error) {
 	dbMu.RLock()
 	defer dbMu.RUnlock()
 
 	var p models.ReviewProject
 	var coverFileId sql.NullString
 	err := db.QueryRow(
-		"SELECT id, userId, name, coverFileId, createdAt, updatedAt FROM review_projects WHERE id = ? AND userId = ?",
-		id, userID,
+		"SELECT id, userId, name, coverFileId, createdAt, updatedAt FROM review_projects WHERE id = ?",
+		id,
 	).Scan(&p.ID, &p.UserID, &p.Name, &coverFileId, &p.CreatedAt, &p.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -105,23 +103,10 @@ func CreateReviewEpisode(episode *models.ReviewEpisode) error {
 	return err
 }
 
-// ListReviewEpisodes 获取项目的单集列表
-func ListReviewEpisodes(projectID, userID string) ([]models.ReviewEpisode, error) {
+// ListReviewEpisodes 获取项目的单集列表 (移除 userID 参数)
+func ListReviewEpisodes(projectID string) ([]models.ReviewEpisode, error) {
 	dbMu.RLock()
 	defer dbMu.RUnlock()
-
-	// 验证项目归属
-	var projectUserID string
-	err := db.QueryRow("SELECT userId FROM review_projects WHERE id = ?", projectID).Scan(&projectUserID)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("项目不存在")
-	}
-	if err != nil {
-		return nil, err
-	}
-	if projectUserID != userID {
-		return nil, fmt.Errorf("无权限访问此项目")
-	}
 
 	rows, err := db.Query(
 		"SELECT id, projectId, userId, name, coverFileId, createdAt, updatedAt FROM review_episodes WHERE projectId = ? ORDER BY createdAt DESC",
@@ -158,8 +143,8 @@ func ListReviewEpisodes(projectID, userID string) ([]models.ReviewEpisode, error
 	return episodes, nil
 }
 
-// GetReviewEpisode 获取单个单集详情
-func GetReviewEpisode(id, userID string) (*models.ReviewEpisode, error) {
+// GetReviewEpisode 获取单个单集详情 (移除 userID 参数)
+func GetReviewEpisode(id string) (*models.ReviewEpisode, error) {
 	dbMu.RLock()
 	defer dbMu.RUnlock()
 
@@ -177,13 +162,6 @@ func GetReviewEpisode(id, userID string) (*models.ReviewEpisode, error) {
 	}
 	if coverFileId.Valid {
 		e.CoverFileID = coverFileId.String
-	}
-
-	// 验证权限
-	var projectUserID string
-	err = db.QueryRow("SELECT userId FROM review_projects WHERE id = ?", e.ProjectID).Scan(&projectUserID)
-	if err != nil || projectUserID != userID {
-		return nil, fmt.Errorf("无权限访问此单集")
 	}
 
 	// 计算分镜数
@@ -210,31 +188,10 @@ func CreateReviewStoryboard(storyboard *models.ReviewStoryboard) error {
 	return err
 }
 
-// ListReviewStoryboards 获取单集的分镜列表
-func ListReviewStoryboards(episodeID, userID string) ([]models.ReviewStoryboard, error) {
+// ListReviewStoryboards 获取单集的分镜列表 (移除 userID 参数)
+func ListReviewStoryboards(episodeID string) ([]models.ReviewStoryboard, error) {
 	dbMu.RLock()
 	defer dbMu.RUnlock()
-
-	// 验证权限
-	var episodeUserID string
-	err := db.QueryRow("SELECT userId FROM review_episodes WHERE id = ?", episodeID).Scan(&episodeUserID)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("单集不存在")
-	}
-	if err != nil {
-		return nil, err
-	}
-	if episodeUserID != userID {
-		// 进一步验证项目归属
-		var projectID string
-		if err := db.QueryRow("SELECT projectId FROM review_episodes WHERE id = ?", episodeID).Scan(&projectID); err != nil {
-			return nil, err
-		}
-		var projectUserID string
-		if err := db.QueryRow("SELECT userId FROM review_projects WHERE id = ?", projectID).Scan(&projectUserID); err != nil || projectUserID != userID {
-			return nil, fmt.Errorf("无权限访问此单集")
-		}
-	}
 
 	rows, err := db.Query(
 		"SELECT id, episodeId, userId, imageFileId, status, feedback, sortOrder, createdAt, updatedAt FROM review_storyboards WHERE episodeId = ? ORDER BY sortOrder ASC",
@@ -368,8 +325,8 @@ func UpdateReviewStoryboard(storyboardID, name, imageFileID string) error {
 	return err
 }
 
-// GetReviewStoryboard 获取单个分镜详情
-func GetReviewStoryboard(id, userID string) (*models.ReviewStoryboard, error) {
+// GetReviewStoryboard 获取单个分镜详情 (移除 userID 参数)
+func GetReviewStoryboard(id string) (*models.ReviewStoryboard, error) {
 	dbMu.RLock()
 	defer dbMu.RUnlock()
 
@@ -387,24 +344,6 @@ func GetReviewStoryboard(id, userID string) (*models.ReviewStoryboard, error) {
 	}
 	if feedback.Valid {
 		s.Feedback = feedback.String
-	}
-
-	// 验证权限
-	var episodeUserID string
-	err = db.QueryRow("SELECT userId FROM review_episodes WHERE id = ?", s.EpisodeID).Scan(&episodeUserID)
-	if err != nil {
-		return nil, err
-	}
-	if episodeUserID != userID {
-		// 进一步验证项目归属
-		var projectID string
-		if err := db.QueryRow("SELECT projectId FROM review_episodes WHERE id = ?", s.EpisodeID).Scan(&projectID); err != nil {
-			return nil, err
-		}
-		var projectUserID string
-		if err := db.QueryRow("SELECT userId FROM review_projects WHERE id = ?", projectID).Scan(&projectUserID); err != nil || projectUserID != userID {
-			return nil, fmt.Errorf("无权限访问此分镜")
-		}
 	}
 
 	return &s, nil

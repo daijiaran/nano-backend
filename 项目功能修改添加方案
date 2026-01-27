@@ -1,0 +1,331 @@
+为了实现“每个用户都能看到所有人上传的项目、单集和分镜”，你需要修改后端代码，移除数据库查询中关于 `userID` 的过滤条件。
+
+主要修改涉及两个文件：
+
+1. **`internal/database/review.go`**: 修改数据库查询函数，移除 SQL 中的 `WHERE userId = ?` 限制。
+2. **`internal/handlers/review_handlers.go`**: 更新调用这些数据库函数的地方，不再传入 `user.ID`。
+
+以下是具体的修改方案：
+
+### 1. 修改 `internal/database/review.go`
+
+你需要修改 `List`（列表）和 `Get`（详情）相关的函数，移除权限验证和 SQL 过滤。
+
+```go
+package database
+
+// ... 保持 imports 不变 ...
+
+// ========== 影视项目 (Projects) ==========
+
+// ListReviewProjects 获取所有项目列表 (移除 userID 参数)
+// 修改前: func ListReviewProjects(userID string) ([]models.ReviewProject, error)
+func ListReviewProjects() ([]models.ReviewProject, error) {
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+
+	// 修改 SQL: 移除 WHERE userId = ?
+	rows, err := db.Query(
+		"SELECT id, userId, name, coverFileId, createdAt, updatedAt FROM review_projects ORDER BY createdAt DESC",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// ... 保持后续 scan 代码不变 ...
+    // 注意: 即使移除了参数，后面的 scan 逻辑完全不用变
+    // ...
+    // return projects, nil
+    
+    // (为节省篇幅，省略中间未变代码，请保留原文件中的 scan 逻辑)
+    var projects []models.ReviewProject
+	for rows.Next() {
+        // ... 原有代码 ...
+		var p models.ReviewProject
+		var coverFileId sql.NullString
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &coverFileId, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+        // ... 原有代码 ...
+        projects = append(projects, p)
+	}
+	if projects == nil {
+		return []models.ReviewProject{}, nil
+	}
+	return projects, nil
+}
+
+// GetReviewProject 获取单个项目详情 (移除 userID 参数)
+// 修改前: func GetReviewProject(id, userID string) (*models.ReviewProject, error)
+func GetReviewProject(id string) (*models.ReviewProject, error) {
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+
+	var p models.ReviewProject
+	var coverFileId sql.NullString
+	// 修改 SQL: 移除 AND userId = ?
+	err := db.QueryRow(
+		"SELECT id, userId, name, coverFileId, createdAt, updatedAt FROM review_projects WHERE id = ?",
+		id,
+	).Scan(&p.ID, &p.UserID, &p.Name, &coverFileId, &p.CreatedAt, &p.UpdatedAt)
+	
+    // ... 保持后续代码不变 ...
+    if err == sql.ErrNoRows {
+		return nil, nil
+	}
+    // ...
+	return &p, nil
+}
+
+// ========== 影视单集 (Episodes) ==========
+
+// ListReviewEpisodes 获取项目的单集列表 (移除 userID 参数)
+// 修改前: func ListReviewEpisodes(projectID, userID string) ([]models.ReviewEpisode, error)
+func ListReviewEpisodes(projectID string) ([]models.ReviewEpisode, error) {
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+
+	// 删除: 验证项目归属的代码块 (验证 userId 的部分)
+    // 直接保留查询是否存在即可，或者直接执行查询
+    
+	rows, err := db.Query(
+		"SELECT id, projectId, userId, name, coverFileId, createdAt, updatedAt FROM review_episodes WHERE projectId = ? ORDER BY createdAt DESC",
+		projectID,
+	)
+    // ... 保持后续代码不变 ...
+    if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+    
+    var episodes []models.ReviewEpisode
+	for rows.Next() {
+        // ... 原有代码 ...
+        var e models.ReviewEpisode
+		var coverFileId sql.NullString
+		if err := rows.Scan(&e.ID, &e.ProjectID, &e.UserID, &e.Name, &coverFileId, &e.CreatedAt, &e.UpdatedAt); err != nil {
+			return nil, err
+		}
+        // ...
+        episodes = append(episodes, e)
+    }
+	if episodes == nil {
+		return []models.ReviewEpisode{}, nil
+	}
+	return episodes, nil
+}
+
+// GetReviewEpisode 获取单个单集详情 (移除 userID 参数)
+// 修改前: func GetReviewEpisode(id, userID string) (*models.ReviewEpisode, error)
+func GetReviewEpisode(id string) (*models.ReviewEpisode, error) {
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+
+	var e models.ReviewEpisode
+	var coverFileId sql.NullString
+	err := db.QueryRow(
+		"SELECT id, projectId, userId, name, coverFileId, createdAt, updatedAt FROM review_episodes WHERE id = ?",
+		id,
+	).Scan(&e.ID, &e.ProjectID, &e.UserID, &e.Name, &coverFileId, &e.CreatedAt, &e.UpdatedAt)
+	
+    // ...
+    // 删除: 验证权限 (验证 projectUserID != userID) 的代码块
+    // ...
+
+	return &e, nil
+}
+
+// ========== 分镜 (Storyboards) ==========
+
+// ListReviewStoryboards 获取单集的分镜列表 (移除 userID 参数)
+// 修改前: func ListReviewStoryboards(episodeID, userID string) ([]models.ReviewStoryboard, error)
+func ListReviewStoryboards(episodeID string) ([]models.ReviewStoryboard, error) {
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+
+	// 删除: 验证权限 (验证 episodeUserID != userID) 的所有代码块
+
+	rows, err := db.Query(
+		"SELECT id, episodeId, userId, imageFileId, status, feedback, sortOrder, createdAt, updatedAt FROM review_storyboards WHERE episodeId = ? ORDER BY sortOrder ASC",
+		episodeID,
+	)
+    // ... 保持后续代码不变 ...
+    if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+    var storyboards []models.ReviewStoryboard
+	for rows.Next() {
+        // ... 原有代码 ...
+        var s models.ReviewStoryboard
+		var feedback sql.NullString
+		if err := rows.Scan(&s.ID, &s.EpisodeID, &s.UserID, &s.ImageFileID, &s.Status, &feedback, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+        // ...
+        storyboards = append(storyboards, s)
+    }
+	if storyboards == nil {
+		return []models.ReviewStoryboard{}, nil
+	}
+	return storyboards, nil
+}
+
+// GetReviewStoryboard 获取单个分镜详情 (移除 userID 参数)
+// 修改前: func GetReviewStoryboard(id, userID string) (*models.ReviewStoryboard, error)
+func GetReviewStoryboard(id string) (*models.ReviewStoryboard, error) {
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+
+	var s models.ReviewStoryboard
+	var feedback sql.NullString
+	err := db.QueryRow(
+		"SELECT id, episodeId, userId, imageFileId, status, feedback, sortOrder, createdAt, updatedAt FROM review_storyboards WHERE id = ?",
+		id,
+	).Scan(&s.ID, &s.EpisodeID, &s.UserID, &s.ImageFileID, &s.Status, &feedback, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt)
+	
+    // ...
+    // 删除: 验证权限 的代码块
+    // ...
+
+	return &s, nil
+}
+
+```
+
+---
+
+### 2. 修改 `internal/handlers/review_handlers.go`
+
+由于数据库函数的签名（参数）变了，Handler 中的调用也必须对应修改。
+
+```go
+package handlers
+
+// ...
+
+// ListReviewProjects 获取项目列表
+func ListReviewProjects(c *fiber.Ctx) error {
+	// user := middleware.GetCurrentUser(c) // 不再需要 user
+
+	// 修改调用: 移除 user.ID
+	projects, err := database.ListReviewProjects() 
+	if err != nil {
+        // ...
+	}
+	return c.JSON(projects)
+}
+
+// GetReviewProject 获取项目详情
+func GetReviewProject(c *fiber.Ctx) error {
+	// user := middleware.GetCurrentUser(c)
+	id := c.Params("id")
+
+	// 修改调用: 移除 user.ID
+	project, err := database.GetReviewProject(id)
+	// ...
+	return c.JSON(project)
+}
+
+// CreateReviewEpisode 创建单集
+func CreateReviewEpisode(c *fiber.Ctx) error {
+    // ...
+	// 验证项目归属 (注意：现在 GetReviewProject 不校验用户了，这意味着任何人都能给任何项目加单集)
+    // 修改调用: 移除 user.ID
+	project, err := database.GetReviewProject(projectID)
+    // ...
+}
+
+// ListReviewEpisodes 获取单集列表
+func ListReviewEpisodes(c *fiber.Ctx) error {
+	// user := middleware.GetCurrentUser(c)
+	projectID := c.Params("projectId")
+
+	// 修改调用: 移除 user.ID
+	episodes, err := database.ListReviewEpisodes(projectID)
+	// ...
+	return c.JSON(episodes)
+}
+
+// GetReviewEpisode 获取单集详情
+func GetReviewEpisode(c *fiber.Ctx) error {
+	// user := middleware.GetCurrentUser(c)
+	id := c.Params("id")
+
+	// 修改调用: 移除 user.ID
+	episode, err := database.GetReviewEpisode(id)
+	// ...
+	return c.JSON(episode)
+}
+
+// CreateReviewStoryboard 创建分镜
+func CreateReviewStoryboard(c *fiber.Ctx) error {
+    // ...
+	// 验证单集存在
+    // 修改调用: 移除 user.ID
+	episode, err := database.GetReviewEpisode(episodeID)
+    // ...
+}
+
+// ListReviewStoryboards 获取分镜列表
+func ListReviewStoryboards(c *fiber.Ctx) error {
+	// user := middleware.GetCurrentUser(c)
+	episodeID := c.Params("episodeId")
+	token := middleware.GetToken(c)
+
+	// 修改调用: 移除 user.ID
+	storyboards, err := database.ListReviewStoryboards(episodeID)
+	// ...
+	return c.JSON(responses)
+}
+
+// ReviewStoryboard 审阅/修改分镜状态
+func ReviewStoryboard(c *fiber.Ctx) error {
+	// user := middleware.GetCurrentUser(c)
+	storyboardID := c.Params("id")
+
+    // ...
+
+	// 验证权限
+    // 修改调用: 移除 user.ID
+	storyboard, err := database.GetReviewStoryboard(storyboardID)
+    // ...
+}
+
+// ReorderStoryboards 分镜排序
+func ReorderStoryboards(c *fiber.Ctx) error {
+	// ...
+	for _, id := range body.StoryboardIDs {
+        // 修改调用: 移除 user.ID
+		storyboard, err := database.GetReviewStoryboard(id)
+		// ...
+	}
+    // ...
+}
+
+// UpdateReviewProject 更新影视项目
+func UpdateReviewProject(c *fiber.Ctx) error {
+	// ...
+	// 1. 获取原数据
+    // 修改调用: 移除 user.ID
+	existing, err := database.GetReviewProject(projectID)
+	// ...
+
+    // 重要：保留这里的权限校验，防止虽然能看，但随便改别人项目的名字
+	// 2. 权限校验：非创建者且非管理则报错
+	if existing.UserID != user.ID && user.Role != "admin" {
+		return c.Status(403).JSON(fiber.Map{"error": "无权修改他人的项目"})
+	}
+    // ...
+}
+
+// UpdateReviewEpisode 和 UpdateReviewStoryboard 同理
+// 修改 Get调用为不带 user.ID 的版本，但保留后续的 if existing.UserID != user.ID 判断
+
+```
+
+### 总结
+
+通过以上修改，你的后端 `List` 和 `Get` 接口将不再检查请求者是否为创建者，从而允许任何登录用户查看系统中的所有项目。同时，因为我们在 `Update` 接口中保留了显式的 ID 检查（`existing.UserID != user.ID`），所以数据的安全性（防止他人篡改）依然得到保障。

@@ -1232,17 +1232,28 @@ func trimReferenceUploads(userID string, limit int) error {
 // ========== File Handlers ==========
 
 func GetFile(c *fiber.Ctx) error {
-	user := middleware.GetCurrentUser(c)
-	id := c.Params("id")
+	 user := middleware.GetCurrentUser(c)
+	 id := c.Params("id")
 
-	file, err := database.GetFileByID(id)
-	if err != nil {
-		log.Printf("[file] Error getting file: %v", err)
-		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
-	}
-	if file == nil || file.UserID != user.ID {
-		return c.Status(404).JSON(fiber.Map{"error": "未找到"})
-	}
+	 file, err := database.GetFileByID(id)
+	 if err != nil {
+	 	 log.Printf("[file] Error getting file: %v", err)
+	 	 return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
+	 }
+
+	 // 定义哪些用途的文件是公开的 (影视项目的相关图片)
+	 isPublicAsset := false
+	 if file != nil {
+	 	 switch file.Purpose {
+	 	 case "project-cover", "episode-cover", "storyboard-image":
+	 	 	 isPublicAsset = true
+	 	 }
+	 }
+
+	 // 逻辑修改：如果是拥有者 OR 是公开资源，则允许访问
+	 if file == nil || (!isPublicAsset && file.UserID != user.ID) {
+	 	 return c.Status(404).JSON(fiber.Map{"error": "未找到"})
+	 }
 
 	if c.Query("download") == "1" {
 		filename := c.Query("filename")
