@@ -7,12 +7,15 @@ import (
 // --- 数据库表模型 (GORM Tags) ---
 
 type User struct {
-	ID           string `gorm:"primaryKey" json:"id"`
-	Username     string `gorm:"uniqueIndex;not null" json:"username"`
-	Role         string `json:"role"`
-	PasswordHash string `json:"-"`
-	Disabled     bool   `json:"disabled"`
-	CreatedAt    int64  `json:"createdAt"`
+	ID              string `gorm:"primaryKey" json:"id"`
+	Username        string `gorm:"uniqueIndex;not null" json:"username"`
+	Role            string `json:"role"`
+	PasswordHash    string `json:"-"`
+	Disabled        bool   `json:"disabled"`
+	CreatedAt       int64  `json:"createdAt"`
+	// 新增字段
+	IsLoggedIn      bool   `json:"isLoggedIn"`      // 是否在线
+	LastHeartbeatAt int64  `json:"lastHeartbeatAt"` // 最后心跳时间
 }
 
 type Session struct {

@@ -69,10 +69,27 @@ func Login(c *fiber.Ctx) error {
 		return c.Status(403).JSON(fiber.Map{"error": "账号已被禁用，请联系管理员"})
 	}
 
+	// === 新增互斥登录检查 ===
+	// 方案第5点：检查状态。如果已登录且心跳在有效期内，则拒绝。
+	// 这里加一个宽限期（例如1分钟），防止因为网络波动导致的误判
+	activeTimeout := int64(10 * 60 * 1000) // 10分钟
+	if user.IsLoggedIn && (models.Now()-user.LastHeartbeatAt < activeTimeout) {
+		log.Printf("[auth] Login rejected: User %s is already logged in", body.Username)
+		return c.Status(409).JSON(fiber.Map{
+			"error": "该账号已在其他设备登录，请先退出或等待系统自动清理",
+		})
+	}
+	// =====================
+
 	session, err := database.CreateSession(user.ID, cfg.SessionTTLHours)
 	if err != nil {
 		log.Printf("[auth] Failed to create session: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
+	}
+
+	// === 更新状态为已登录 ===
+	if err := database.UpdateLoginStatus(user.ID, true); err != nil {
+		log.Printf("[auth] Failed to update login status: %v", err)
 	}
 
 	log.Printf("[auth] Login successful for user: %s", body.Username)
@@ -89,10 +106,20 @@ func Login(c *fiber.Ctx) error {
 }
 
 func Logout(c *fiber.Ctx) error {
+	user := middleware.GetCurrentUser(c)
 	token := middleware.GetToken(c)
+
 	if err := database.DeleteSession(token); err != nil {
-		log.Printf("[auth] Logout error: %v", err)
+		log.Printf("[auth] Logout session error: %v", err)
 	}
+
+	// === 方案第3点：将状态置为未登录 ===
+	if user != nil {
+		if err := database.UpdateLoginStatus(user.ID, false); err != nil {
+			log.Printf("[auth] Update status error: %v", err)
+		}
+	}
+
 	log.Printf("[auth] User logged out")
 	return c.JSON(fiber.Map{"ok": true})
 }
@@ -100,6 +127,17 @@ func Logout(c *fiber.Ctx) error {
 func GetCurrentUser(c *fiber.Ctx) error {
 	user := middleware.GetCurrentUser(c)
 	return c.JSON(user)
+}
+
+// Heartbeat 接收前端的保活请求
+func Heartbeat(c *fiber.Ctx) error {
+	user := middleware.GetCurrentUser(c)
+
+	if err := database.UpdateHeartbeat(user.ID); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
+	}
+
+	return c.JSON(fiber.Map{"ok": true})
 }
 
 // ========== Models Handler ==========
@@ -577,11 +615,11 @@ func GenerateImage(c *fiber.Ctx) error {
 
 	// 解析JSON请求体
 	var body struct {
-		Prompt        string `json:"prompt"`
-		Model         string `json:"model"`
-		ImageSize     string `json:"imageSize"`
-		AspectRatio   string `json:"aspectRatio"`
-		Batch         int    `json:"batch"`
+		Prompt      string `json:"prompt"`
+		Model       string `json:"model"`
+		ImageSize   string `json:"imageSize"`
+		AspectRatio string `json:"aspectRatio"`
+		Batch       int    `json:"batch"`
 		// 新的有序参考图列表格式
 		ReferenceList []struct {
 			Type  string `json:"type"`  // "fileId" 或 "base64"
@@ -1232,28 +1270,28 @@ func trimReferenceUploads(userID string, limit int) error {
 // ========== File Handlers ==========
 
 func GetFile(c *fiber.Ctx) error {
-	 user := middleware.GetCurrentUser(c)
-	 id := c.Params("id")
+	user := middleware.GetCurrentUser(c)
+	id := c.Params("id")
 
-	 file, err := database.GetFileByID(id)
-	 if err != nil {
-	 	 log.Printf("[file] Error getting file: %v", err)
-	 	 return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
-	 }
+	file, err := database.GetFileByID(id)
+	if err != nil {
+		log.Printf("[file] Error getting file: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
+	}
 
-	 // 定义哪些用途的文件是公开的 (影视项目的相关图片)
-	 isPublicAsset := false
-	 if file != nil {
-	 	 switch file.Purpose {
-	 	 case "project-cover", "episode-cover", "storyboard-image":
-	 	 	 isPublicAsset = true
-	 	 }
-	 }
+	// 定义哪些用途的文件是公开的 (影视项目的相关图片)
+	isPublicAsset := false
+	if file != nil {
+		switch file.Purpose {
+		case "project-cover", "episode-cover", "storyboard-image":
+			isPublicAsset = true
+		}
+	}
 
-	 // 逻辑修改：如果是拥有者 OR 是公开资源，则允许访问
-	 if file == nil || (!isPublicAsset && file.UserID != user.ID) {
-	 	 return c.Status(404).JSON(fiber.Map{"error": "未找到"})
-	 }
+	// 逻辑修改：如果是拥有者 OR 是公开资源，则允许访问
+	if file == nil || (!isPublicAsset && file.UserID != user.ID) {
+		return c.Status(404).JSON(fiber.Map{"error": "未找到"})
+	}
 
 	if c.Query("download") == "1" {
 		filename := c.Query("filename")

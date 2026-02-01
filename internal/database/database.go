@@ -47,6 +47,18 @@ func Init(cfg *config.Config) error {
 	}
 
 	log.Printf("[database] Initialized at %s", dbPath)
+	// Migration: Add IsLoggedIn column
+	_, err = db.Exec("ALTER TABLE users ADD COLUMN isLoggedIn INTEGER NOT NULL DEFAULT 0")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		log.Printf("[database] Note: isLoggedIn column migration: %v", err)
+	}
+
+	// Migration: Add LastHeartbeatAt column
+	_, err = db.Exec("ALTER TABLE users ADD COLUMN lastHeartbeatAt INTEGER NOT NULL DEFAULT 0")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		log.Printf("[database] Note: lastHeartbeatAt column migration: %v", err)
+	}
+
 	return nil
 }
 
@@ -353,10 +365,11 @@ func GetUserByUsername(username string) (*models.User, error) {
 
 	var u models.User
 	var disabled int
+	var isLoggedIn int
 	err := db.QueryRow(
-		"SELECT id, username, role, passwordHash, disabled, createdAt FROM users WHERE LOWER(username) = LOWER(?)",
+		"SELECT id, username, role, passwordHash, disabled, createdAt, isLoggedIn, lastHeartbeatAt FROM users WHERE LOWER(username) = LOWER(?)",
 		username,
-	).Scan(&u.ID, &u.Username, &u.Role, &u.PasswordHash, &disabled, &u.CreatedAt)
+	).Scan(&u.ID, &u.Username, &u.Role, &u.PasswordHash, &disabled, &u.CreatedAt, &isLoggedIn, &u.LastHeartbeatAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -364,6 +377,7 @@ func GetUserByUsername(username string) (*models.User, error) {
 		return nil, err
 	}
 	u.Disabled = disabled != 0
+	u.IsLoggedIn = isLoggedIn != 0
 	return &u, nil
 }
 
@@ -373,10 +387,11 @@ func GetUserByID(id string) (*models.User, error) {
 
 	var u models.User
 	var disabled int
+	var isLoggedIn int
 	err := db.QueryRow(
-		"SELECT id, username, role, passwordHash, disabled, createdAt FROM users WHERE id = ?",
+		"SELECT id, username, role, passwordHash, disabled, createdAt, isLoggedIn, lastHeartbeatAt FROM users WHERE id = ?",
 		id,
-	).Scan(&u.ID, &u.Username, &u.Role, &u.PasswordHash, &disabled, &u.CreatedAt)
+	).Scan(&u.ID, &u.Username, &u.Role, &u.PasswordHash, &disabled, &u.CreatedAt, &isLoggedIn, &u.LastHeartbeatAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -384,6 +399,7 @@ func GetUserByID(id string) (*models.User, error) {
 		return nil, err
 	}
 	u.Disabled = disabled != 0
+	u.IsLoggedIn = isLoggedIn != 0
 	return &u, nil
 }
 
@@ -1121,6 +1137,49 @@ func DeletePreset(userID, id string) error {
 
 	_, err := db.Exec("DELETE FROM presets WHERE id = ? AND userId = ?", id, userID)
 	return err
+}
+
+// UpdateLoginStatus 更新用户的登录状态和心跳时间
+func UpdateLoginStatus(userID string, isLoggedIn bool) error {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+
+	status := 0
+	if isLoggedIn {
+		status = 1
+	}
+
+	now := models.Now()
+	_, err := db.Exec("UPDATE users SET isLoggedIn = ?, lastHeartbeatAt = ? WHERE id = ?", status, now, userID)
+	return err
+}
+
+// UpdateHeartbeat 仅更新心跳时间（用于前端定时轮询）
+func UpdateHeartbeat(userID string) error {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+
+	now := models.Now()
+	// 同时确保 isLoggedIn 为 1，防止意外状态
+	_, err := db.Exec("UPDATE users SET lastHeartbeatAt = ?, isLoggedIn = 1 WHERE id = ?", now, userID)
+	return err
+}
+
+// ClearStaleUsers 检查并重置超时未发送心跳的用户（对应你的第4点）
+// timeoutMilli: 超时时间，例如 10分钟 = 600000 毫秒
+func ClearStaleUsers(timeoutMilli int64) (int64, error) {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+
+	cutoff := models.Now() - timeoutMilli
+
+	// 将超时且当前标记为登录的用户重置为未登录
+	result, err := db.Exec("UPDATE users SET isLoggedIn = 0 WHERE isLoggedIn = 1 AND lastHeartbeatAt < ?", cutoff)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected()
 }
 
 // ========== Library operations ==========

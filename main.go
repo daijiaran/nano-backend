@@ -75,14 +75,34 @@ func main() {
 
 	// Start cleanup loops
 	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
+		ticker := time.NewTicker(1 * time.Hour) // 你的原有清理逻辑
+
+		// 新增：心跳检查 ticker，每分钟检查一次
+		heartbeatTicker := time.NewTicker(1 * time.Minute)
+
 		defer ticker.Stop()
+		defer heartbeatTicker.Stop()
+
 		// Run immediately
 		database.CleanupExpiredSessions()
 		database.CleanupExpiredFiles(cfg)
-		for range ticker.C {
-			database.CleanupExpiredSessions()
-			database.CleanupExpiredFiles(cfg)
+
+		for {
+			select {
+			case <-ticker.C:
+				database.CleanupExpiredSessions()
+				database.CleanupExpiredFiles(cfg)
+
+			case <-heartbeatTicker.C:
+				// === 方案第4点：每分钟检查一次，将超过10分钟没发心跳的用户置为未登录 ===
+				timeout := int64(10 * 60 * 1000) // 10分钟
+				count, err := database.ClearStaleUsers(timeout)
+				if err != nil {
+					log.Printf("[cleanup] Error checking stale users: %v", err)
+				} else if count > 0 {
+					log.Printf("[cleanup] Logged out %d inactive users", count)
+				}
+			}
 		}
 	}()
 
@@ -116,6 +136,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	// Auth routes (auth required)
 	app.Post("/api/auth/logout", authMiddleware, handlers.Logout)
 	app.Get("/api/auth/me", authMiddleware, handlers.GetCurrentUser)
+
+	// === 新增心跳路由 ===
+	// 前端需定时（如每5分钟）POST 此接口
+	app.Post("/api/auth/heartbeat", authMiddleware, handlers.Heartbeat)
 
 	// Models
 	app.Get("/api/models", authMiddleware, handlers.GetModels)
