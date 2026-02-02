@@ -230,6 +230,26 @@ func ExtractImageURLs(response *ImageGenerationResponse) []string {
 				}
 			} else if part.Text != "" {
 				log.Printf("[gemini] ExtractImageURLs: candidate %d part %d has text, length=%d", i, j, len(part.Text))
+
+				text := part.Text
+				var mimeType string
+
+				if strings.HasPrefix(text, "/9j/") {
+					mimeType = "image/jpeg"
+				} else if strings.HasPrefix(text, "iVBORw0KGgo") {
+					mimeType = "image/png"
+				} else if strings.HasPrefix(text, "R0lGOD") {
+					mimeType = "image/gif"
+				} else if strings.HasPrefix(text, "UklGR") {
+					mimeType = "image/webp"
+				}
+
+				if mimeType != "" {
+					log.Printf("[gemini] ExtractImageURLs: found base64 image in text part, mime_type=%s", mimeType)
+					dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, text)
+					urls = append(urls, dataURL)
+					log.Printf("[gemini] ExtractImageURLs: added data URL from text, total urls = %d", len(urls))
+				}
 			}
 		}
 	}
