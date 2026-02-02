@@ -511,3 +511,92 @@ func UpdateReviewStoryboard(c *fiber.Ctx) error {
 
 	return c.JSON(updatedStoryboard)
 }
+
+// ========== 删除 Handlers ==========
+
+// DeleteReviewProject 删除项目
+func DeleteReviewProject(c *fiber.Ctx) error {
+	user := middleware.GetCurrentUser(c)
+	projectID := c.Params("id")
+
+	// 1. 获取项目信息进行权限验证
+	project, err := database.GetReviewProject(projectID)
+	if err != nil {
+		log.Printf("[review] Error getting project for delete: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
+	}
+	if project == nil {
+		return c.Status(404).JSON(fiber.Map{"error": "项目不存在"})
+	}
+
+	// 2. 权限校验
+	if project.UserID != user.ID && user.Role != "admin" {
+		return c.Status(403).JSON(fiber.Map{"error": "无权删除他人的项目"})
+	}
+
+	// 3. 执行删除
+	if err := database.DeleteReviewProject(projectID); err != nil {
+		log.Printf("[review] Error deleting project: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "删除失败"})
+	}
+
+	return c.JSON(fiber.Map{"ok": true})
+}
+
+// DeleteReviewEpisode 删除单集
+func DeleteReviewEpisode(c *fiber.Ctx) error {
+	user := middleware.GetCurrentUser(c)
+	episodeID := c.Params("id")
+
+	// 1. 获取单集信息进行权限验证
+	episode, err := database.GetReviewEpisode(episodeID)
+	if err != nil {
+		log.Printf("[review] Error getting episode for delete: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
+	}
+	if episode == nil {
+		return c.Status(404).JSON(fiber.Map{"error": "单集不存在"})
+	}
+
+	// 2. 权限校验
+	if episode.UserID != user.ID && user.Role != "admin" {
+		return c.Status(403).JSON(fiber.Map{"error": "无权删除他人的单集"})
+	}
+
+	// 3. 执行删除
+	if err := database.DeleteReviewEpisode(episodeID); err != nil {
+		log.Printf("[review] Error deleting episode: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "删除失败"})
+	}
+
+	return c.JSON(fiber.Map{"ok": true})
+}
+
+// DeleteReviewStoryboard 删除分镜
+func DeleteReviewStoryboard(c *fiber.Ctx) error {
+	user := middleware.GetCurrentUser(c)
+	storyboardID := c.Params("id")
+
+	// 1. 获取分镜信息进行权限验证
+	storyboard, err := database.GetReviewStoryboard(storyboardID)
+	if err != nil {
+		log.Printf("[review] Error getting storyboard for delete: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "服务器错误"})
+	}
+	if storyboard == nil {
+		return c.Status(404).JSON(fiber.Map{"error": "分镜不存在"})
+	}
+
+	// 2. 权限校验
+	if storyboard.UserID != user.ID && user.Role != "admin" {
+		return c.Status(403).JSON(fiber.Map{"error": "无权删除他人的分镜"})
+	}
+
+	// 3. 执行删除
+	if err := database.DeleteReviewStoryboard(storyboardID); err != nil {
+		log.Printf("[review] Error deleting storyboard: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "删除失败"})
+	}
+
+	return c.JSON(fiber.Map{"ok": true})
+}

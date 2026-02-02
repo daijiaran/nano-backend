@@ -380,3 +380,71 @@ func GetReviewStoryboard(id string) (*models.ReviewStoryboard, error) {
 
 	return &s, nil
 }
+
+// ========== 删除操作 ==========
+
+// DeleteReviewStoryboard 删除分镜
+func DeleteReviewStoryboard(id string) error {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+
+	_, err := db.Exec("DELETE FROM review_storyboards WHERE id = ?", id)
+	return err
+}
+
+// DeleteReviewEpisode 删除单集 (包含其下的所有分镜)
+func DeleteReviewEpisode(id string) error {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. 删除该单集下的所有分镜
+	if _, err := tx.Exec("DELETE FROM review_storyboards WHERE episodeId = ?", id); err != nil {
+		return err
+	}
+
+	// 2. 删除单集本身
+	if _, err := tx.Exec("DELETE FROM review_episodes WHERE id = ?", id); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// DeleteReviewProject 删除项目 (包含其下的所有单集和分镜)
+func DeleteReviewProject(id string) error {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. 删除该项目下所有单集的分镜
+	queryDeleteStoryboards := `
+		DELETE FROM review_storyboards
+		WHERE episodeId IN (SELECT id FROM review_episodes WHERE projectId = ?)
+	`
+	if _, err := tx.Exec(queryDeleteStoryboards, id); err != nil {
+		return err
+	}
+
+	// 2. 删除该项目下的所有单集
+	if _, err := tx.Exec("DELETE FROM review_episodes WHERE projectId = ?", id); err != nil {
+		return err
+	}
+
+	// 3. 删除项目本身
+	if _, err := tx.Exec("DELETE FROM review_projects WHERE id = ?", id); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}

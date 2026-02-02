@@ -203,6 +203,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	review.Post("/projects", handlers.CreateReviewProject)
 	review.Get("/projects/:id", handlers.GetReviewProject)
 	review.Put("/projects/:id", handlers.UpdateReviewProject)
+	review.Delete("/projects/:id", handlers.DeleteReviewProject)
 
 	// 单集
 	review.Get("/projects/:projectId/episodes", handlers.ListReviewEpisodes)
@@ -210,6 +211,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	review.Put("/episodes/reorder", handlers.ReorderEpisodes)
 	review.Get("/episodes/:id", handlers.GetReviewEpisode)
 	review.Put("/episodes/:id", handlers.UpdateReviewEpisode)
+	review.Delete("/episodes/:id", handlers.DeleteReviewEpisode)
 
 	// 分镜
 	review.Get("/episodes/:episodeId/storyboards", handlers.ListReviewStoryboards)
@@ -217,4 +219,5 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	review.Put("/storyboards/reorder", handlers.ReorderStoryboards)
 	review.Patch("/storyboards/:id/status", handlers.ReviewStoryboard)
 	review.Put("/storyboards/:id", handlers.UpdateReviewStoryboard)
+	review.Delete("/storyboards/:id", handlers.DeleteReviewStoryboard)
 }
