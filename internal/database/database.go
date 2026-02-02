@@ -264,6 +264,12 @@ func createTables() error {
 		log.Printf("[database] Note: elapsedSeconds column migration: %v", err)
 	}
 
+	// Migration: Add errorCode column to generations table if it doesn't exist
+	_, err = db.Exec("ALTER TABLE generations ADD COLUMN errorCode TEXT")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		log.Printf("[database] Note: errorCode column migration: %v", err)
+	}
+
 	return nil
 }
 
@@ -843,11 +849,11 @@ func CreateGeneration(g *models.Generation) error {
 	refFileIDs, _ := json.Marshal(g.ReferenceFileIDs)
 
 	_, err := db.Exec(
-		`INSERT INTO generations (id, userId, type, prompt, model, status, progress, startedAt, elapsedSeconds, error,
+		`INSERT INTO generations (id, userId, type, prompt, model, status, progress, startedAt, elapsedSeconds, error, errorCode,
 			providerTaskId, providerResultUrl, referenceFileIds, imageSize, aspectRatio,
 			favorite, outputFileId, createdAt, updatedAt, duration, videoSize, runId, nodePosition)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		g.ID, g.UserID, g.Type, g.Prompt, g.Model, g.Status, g.Progress, g.StartedAt, g.ElapsedSeconds, g.Error,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		g.ID, g.UserID, g.Type, g.Prompt, g.Model, g.Status, g.Progress, g.StartedAt, g.ElapsedSeconds, g.Error, g.ErrorCode,
 		g.ProviderTaskID, g.ProviderResultURL, string(refFileIDs), g.ImageSize, g.AspectRatio,
 		boolToInt(g.Favorite), g.OutputFileID, g.CreatedAt, g.UpdatedAt, g.Duration, g.VideoSize, g.RunID, g.NodePosition,
 	)
@@ -863,17 +869,17 @@ func GetGenerationByID(id string) (*models.Generation, error) {
 
 func getGenerationByIDInternal(id string) (*models.Generation, error) {
 	var g models.Generation
-	var progress, refFileIDs, imageSize, aspectRatio, errorStr, providerTaskID, providerResultURL, outputFileID, videoSize, runID sql.NullString
+	var progress, refFileIDs, imageSize, aspectRatio, errorStr, errorCode, providerTaskID, providerResultURL, outputFileID, videoSize, runID sql.NullString
 	var startedAt, elapsedSeconds, duration, nodePosition sql.NullInt64
 	var favorite int
 
 	err := db.QueryRow(
-		`SELECT id, userId, type, prompt, model, status, progress, startedAt, elapsedSeconds, error,
+		`SELECT id, userId, type, prompt, model, status, progress, startedAt, elapsedSeconds, error, errorCode,
 			providerTaskId, providerResultUrl, referenceFileIds, imageSize, aspectRatio,
 			favorite, outputFileId, createdAt, updatedAt, duration, videoSize, runId, nodePosition
 		FROM generations WHERE id = ?`,
 		id,
-	).Scan(&g.ID, &g.UserID, &g.Type, &g.Prompt, &g.Model, &g.Status, &progress, &startedAt, &elapsedSeconds, &errorStr,
+	).Scan(&g.ID, &g.UserID, &g.Type, &g.Prompt, &g.Model, &g.Status, &progress, &startedAt, &elapsedSeconds, &errorStr, &errorCode,
 		&providerTaskID, &providerResultURL, &refFileIDs, &imageSize, &aspectRatio,
 		&favorite, &outputFileID, &g.CreatedAt, &g.UpdatedAt, &duration, &videoSize, &runID, &nodePosition)
 
@@ -900,6 +906,10 @@ func getGenerationByIDInternal(id string) (*models.Generation, error) {
 	}
 	if errorStr.Valid {
 		g.Error = &errorStr.String
+	}
+	if errorCode.Valid {
+		ec := models.GenerationErrorCode(errorCode.String)
+		g.ErrorCode = &ec
 	}
 	if providerTaskID.Valid {
 		g.ProviderTaskID = &providerTaskID.String

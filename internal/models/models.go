@@ -7,15 +7,15 @@ import (
 // --- 数据库表模型 (GORM Tags) ---
 
 type User struct {
-	ID              string `gorm:"primaryKey" json:"id"`
-	Username        string `gorm:"uniqueIndex;not null" json:"username"`
-	Role            string `json:"role"`
-	PasswordHash    string `json:"-"`
-	Disabled        bool   `json:"disabled"`
-	CreatedAt       int64  `json:"createdAt"`
+	ID           string `gorm:"primaryKey" json:"id"`
+	Username     string `gorm:"uniqueIndex;not null" json:"username"`
+	Role         string `json:"role"`
+	PasswordHash string `json:"-"`
+	Disabled     bool   `json:"disabled"`
+	CreatedAt    int64  `json:"createdAt"`
 	// 新增字段
-	IsLoggedIn      bool   `json:"isLoggedIn"`      // 是否在线
-	LastHeartbeatAt int64  `json:"lastHeartbeatAt"` // 最后心跳时间
+	IsLoggedIn      bool  `json:"isLoggedIn"`      // 是否在线
+	LastHeartbeatAt int64 `json:"lastHeartbeatAt"` // 最后心跳时间
 }
 
 type Session struct {
@@ -45,29 +45,30 @@ type File struct {
 }
 
 type Generation struct {
-	ID                string   `gorm:"primaryKey" json:"id"`
-	UserID            string   `gorm:"index" json:"userId"`
-	Type              string   `json:"type"`
-	Prompt            string   `json:"prompt"`
-	Model             string   `json:"model"`
-	Status            string   `json:"status"`
-	Progress          *float64 `json:"progress,omitempty"`
-	StartedAt         *int64   `json:"startedAt,omitempty"`
-	ElapsedSeconds    *int64   `json:"elapsedSeconds,omitempty"`
-	Error             *string  `json:"error,omitempty"`
-	ProviderTaskID    *string  `json:"-"`
-	ProviderResultURL *string  `json:"-"`
-	ReferenceFileIDs  []string `gorm:"serializer:json" json:"referenceFileIds"`
-	ImageSize         *string  `json:"imageSize,omitempty"`
-	AspectRatio       *string  `json:"aspectRatio,omitempty"`
-	Favorite          bool     `json:"favorite"`
-	OutputFileID      *string  `json:"-"`
-	Duration          *int     `json:"duration,omitempty"`
-	VideoSize         *string  `json:"videoSize,omitempty"`
-	RunID             *string  `gorm:"index" json:"runId,omitempty"`
-	NodePosition      *int     `json:"nodePosition,omitempty"`
-	CreatedAt         int64    `json:"createdAt"`
-	UpdatedAt         int64    `json:"updatedAt"`
+	ID                string               `gorm:"primaryKey" json:"id"`
+	UserID            string               `gorm:"index" json:"userId"`
+	Type              string               `json:"type"`
+	Prompt            string               `json:"prompt"`
+	Model             string               `json:"model"`
+	Status            string               `json:"status"`
+	Progress          *float64             `json:"progress,omitempty"`
+	StartedAt         *int64               `json:"startedAt,omitempty"`
+	ElapsedSeconds    *int64               `json:"elapsedSeconds,omitempty"`
+	Error             *string              `json:"error,omitempty"`
+	ErrorCode         *GenerationErrorCode `json:"errorCode,omitempty"`
+	ProviderTaskID    *string              `json:"-"`
+	ProviderResultURL *string              `json:"-"`
+	ReferenceFileIDs  []string             `gorm:"serializer:json" json:"referenceFileIds"`
+	ImageSize         *string              `json:"imageSize,omitempty"`
+	AspectRatio       *string              `json:"aspectRatio,omitempty"`
+	Favorite          bool                 `json:"favorite"`
+	OutputFileID      *string              `json:"-"`
+	Duration          *int                 `json:"duration,omitempty"`
+	VideoSize         *string              `json:"videoSize,omitempty"`
+	RunID             *string              `gorm:"index" json:"runId,omitempty"`
+	NodePosition      *int                 `json:"nodePosition,omitempty"`
+	CreatedAt         int64                `json:"createdAt"`
+	UpdatedAt         int64                `json:"updatedAt"`
 }
 
 type Preset struct {
@@ -103,6 +104,21 @@ type VideoRun struct {
 
 // --- API 响应与业务逻辑模型 (纯 Go 定义) ---
 
+// GenerationErrorCode 定义生成任务的错误码
+type GenerationErrorCode string
+
+const (
+	ErrorCodeSuccess            GenerationErrorCode = "success"
+	ErrorCodeUnknown            GenerationErrorCode = "unknown"
+	ErrorCodeTimeout            GenerationErrorCode = "timeout"
+	ErrorCodeInsufficientQuota  GenerationErrorCode = "insufficient_quota"
+	ErrorCodeInvalidAPIKey      GenerationErrorCode = "invalid_api_key"
+	ErrorCodeAPIError           GenerationErrorCode = "api_error"
+	ErrorCodeNetworkError       GenerationErrorCode = "network_error"
+	ErrorCodeInvalidRequest     GenerationErrorCode = "invalid_request"
+	ErrorCodeUnsupportedFeature GenerationErrorCode = "unsupported_feature"
+)
+
 type ModelInfo struct {
 	ID                  string   `json:"id"`
 	Name                string   `json:"name"`
@@ -113,26 +129,27 @@ type ModelInfo struct {
 }
 
 type GenerationResponse struct {
-	ID               string      `json:"id"`
-	Type             string      `json:"type"`
-	Prompt           string      `json:"prompt"`
-	Model            string      `json:"model"`
-	Status           string      `json:"status"`
-	Progress         *float64    `json:"progress"`
-	StartedAt        *int64      `json:"startedAt"`
-	ElapsedSeconds   *int64      `json:"elapsedSeconds"`
-	Error            *string     `json:"error"`
-	Favorite         bool        `json:"favorite"`
-	ImageSize        *string     `json:"imageSize"`
-	AspectRatio      *string     `json:"aspectRatio"`
-	Duration         *int        `json:"duration"`
-	VideoSize        *string     `json:"videoSize"`
-	ReferenceFileIDs []string    `json:"referenceFileIds"`
-	OutputFile       *StoredFile `json:"outputFile"`
-	RunID            *string     `json:"runId"`
-	NodePosition     *int        `json:"nodePosition"`
-	CreatedAt        int64       `json:"createdAt"`
-	UpdatedAt        int64       `json:"updatedAt"`
+	ID               string               `json:"id"`
+	Type             string               `json:"type"`
+	Prompt           string               `json:"prompt"`
+	Model            string               `json:"model"`
+	Status           string               `json:"status"`
+	Progress         *float64             `json:"progress"`
+	StartedAt        *int64               `json:"startedAt"`
+	ElapsedSeconds   *int64               `json:"elapsedSeconds"`
+	Error            *string              `json:"error"`
+	ErrorCode        *GenerationErrorCode `json:"errorCode,omitempty"`
+	Favorite         bool                 `json:"favorite"`
+	ImageSize        *string              `json:"imageSize"`
+	AspectRatio      *string              `json:"aspectRatio"`
+	Duration         *int                 `json:"duration"`
+	VideoSize        *string              `json:"videoSize"`
+	ReferenceFileIDs []string             `json:"referenceFileIds"`
+	OutputFile       *StoredFile          `json:"outputFile"`
+	RunID            *string              `json:"runId"`
+	NodePosition     *int                 `json:"nodePosition"`
+	CreatedAt        int64                `json:"createdAt"`
+	UpdatedAt        int64                `json:"updatedAt"`
 }
 
 type StoredFile struct {
