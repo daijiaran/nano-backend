@@ -40,7 +40,7 @@ type Content struct {
 	Parts []Part `json:"parts"`
 }
 
-// Part represents a part of the content
+// Part represents a part of the content (used for Request)
 type Part struct {
 	Text       string      `json:"text,omitempty"`
 	InlineData *InlineData `json:"inline_data,omitempty"`
@@ -64,14 +64,22 @@ type ImageConfig struct {
 	ImageSize   string `json:"imageSize,omitempty"`
 }
 
+// --- Response Structures (Using Map for robustness) ---
+
 // ImageGenerationResponse represents the response from Gemini 3 Pro
 type ImageGenerationResponse struct {
-	Candidates []Candidate `json:"candidates,omitempty"`
+	Candidates []ResponseCandidate `json:"candidates,omitempty"`
 }
 
-// Candidate represents a generation candidate
-type Candidate struct {
-	Content Content `json:"content,omitempty"`
+// ResponseCandidate represents a generation candidate in the response
+type ResponseCandidate struct {
+	Content ResponseContent `json:"content,omitempty"`
+}
+
+// ResponseContent represents the content in the response
+type ResponseContent struct {
+	// Use map[string]interface{} to capture any field returned by API
+	Parts []map[string]interface{} `json:"parts"`
 }
 
 // CreateImageTask creates a Gemini 3 Pro image generation task
@@ -110,8 +118,8 @@ func (c *Client) CreateImageTask(prompt, aspectRatio, imageSize string, referenc
 		},
 	}
 
-	// Build URL with API key
-	url := fmt.Sprintf("%s/v1beta/models/gemini-3-pro-image-preview:generateContent?key=%s", c.Host, c.APIKey)
+	// Build URL according to API documentation
+	url := fmt.Sprintf("%s/v1beta/models/gemini-3-pro-image-preview:generateContent", c.Host)
 
 	jsonBody, err := json.Marshal(req)
 	if err != nil {
@@ -129,6 +137,7 @@ func (c *Client) CreateImageTask(prompt, aspectRatio, imageSize string, referenc
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", c.APIKey)
 
 	timeout := c.Timeout
 	if timeout <= 0 {
@@ -149,7 +158,6 @@ func (c *Client) CreateImageTask(prompt, aspectRatio, imageSize string, referenc
 	}
 
 	log.Printf("[gemini] Response Status: %d (took %v)", resp.StatusCode, time.Since(startTime))
-	log.Printf("[gemini] Response Body: %s", string(respBody))
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("API调用失败 (HTTP %d): %s", resp.StatusCode, string(respBody))
@@ -158,19 +166,20 @@ func (c *Client) CreateImageTask(prompt, aspectRatio, imageSize string, referenc
 	var result ImageGenerationResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		log.Printf("[gemini] Failed to parse response as JSON: %v", err)
-		log.Printf("[gemini] Response body length: %d bytes", len(respBody))
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	log.Printf("[gemini] Parsed response successfully, candidates count: %d", len(result.Candidates))
-	for i, candidate := range result.Candidates {
-		log.Printf("[gemini] Candidate %d: parts count = %d", i, len(candidate.Content.Parts))
-		for j, part := range candidate.Content.Parts {
-			if part.InlineData != nil {
-				log.Printf("[gemini]   Part %d: inlineData with mime_type=%s, data_length=%d", j, part.InlineData.MimeType, len(part.InlineData.Data))
-			} else if part.Text != "" {
-				log.Printf("[gemini]   Part %d: text with length=%d", j, len(part.Text))
+
+	// Debug log for parts structure
+	for i, cand := range result.Candidates {
+		log.Printf("[gemini] Candidate %d parts count: %d", i, len(cand.Content.Parts))
+		for j, part := range cand.Content.Parts {
+			keys := make([]string, 0, len(part))
+			for k := range part {
+				keys = append(keys, k)
 			}
+			log.Printf("[gemini]   Part %d keys: %v", j, keys)
 		}
 	}
 
@@ -205,6 +214,30 @@ func ParseReferenceDataURL(dataURL string) (ReferenceImage, error) {
 	}, nil
 }
 
+// helper function to safely get string from map
+func getString(m map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if val, ok := m[key]; ok && val != nil {
+			if strVal, ok := val.(string); ok && strVal != "" {
+				return strVal
+			}
+		}
+	}
+	return ""
+}
+
+// helper function to get map from map
+func getMap(m map[string]interface{}, keys ...string) map[string]interface{} {
+	for _, key := range keys {
+		if val, ok := m[key]; ok && val != nil {
+			if mapVal, ok := val.(map[string]interface{}); ok {
+				return mapVal
+			}
+		}
+	}
+	return nil
+}
+
 // ExtractImageURLs extracts image URLs from the response
 func ExtractImageURLs(response *ImageGenerationResponse) []string {
 	var urls []string
@@ -219,21 +252,31 @@ func ExtractImageURLs(response *ImageGenerationResponse) []string {
 	for i, candidate := range response.Candidates {
 		log.Printf("[gemini] ExtractImageURLs: candidate %d, parts count = %d", i, len(candidate.Content.Parts))
 		for j, part := range candidate.Content.Parts {
-			if part.InlineData != nil {
-				log.Printf("[gemini] ExtractImageURLs: candidate %d part %d has inline_data, mime_type=%s, data_length=%d",
-					i, j, part.InlineData.MimeType, len(part.InlineData.Data))
-				if part.InlineData.Data != "" {
-					// Convert base64 to data URL
-					dataURL := fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data)
+			// Try to find inline_data or inlineData
+			inlineData := getMap(part, "inline_data", "inlineData")
+			if inlineData != nil {
+				// Try mime_type or mimeType
+				mimeType := getString(inlineData, "mime_type", "mimeType")
+				// Try data
+				data := getString(inlineData, "data")
+
+				if mimeType != "" && data != "" {
+					dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, data)
 					urls = append(urls, dataURL)
-					log.Printf("[gemini] ExtractImageURLs: added data URL, total urls = %d", len(urls))
+					log.Printf("[gemini] ExtractImageURLs: added data URL from inline_data (keys found)")
+					continue
+				} else {
+					log.Printf("[gemini] ExtractImageURLs: found inlineData but mimeType or data is empty. mimeType len: %d, data len: %d", len(mimeType), len(data))
 				}
-			} else if part.Text != "" {
-				log.Printf("[gemini] ExtractImageURLs: candidate %d part %d has text, length=%d", i, j, len(part.Text))
+			}
 
-				text := part.Text
+			// Try to find text (which might contain base64 image)
+			text := getString(part, "text")
+			if text != "" {
+				log.Printf("[gemini] ExtractImageURLs: candidate %d part %d has text, length=%d", i, j, len(text))
+
 				var mimeType string
-
+				// Check for common image base64 headers
 				if strings.HasPrefix(text, "/9j/") {
 					mimeType = "image/jpeg"
 				} else if strings.HasPrefix(text, "iVBORw0KGgo") {
@@ -248,7 +291,6 @@ func ExtractImageURLs(response *ImageGenerationResponse) []string {
 					log.Printf("[gemini] ExtractImageURLs: found base64 image in text part, mime_type=%s", mimeType)
 					dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, text)
 					urls = append(urls, dataURL)
-					log.Printf("[gemini] ExtractImageURLs: added data URL from text, total urls = %d", len(urls))
 				}
 			}
 		}

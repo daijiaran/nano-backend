@@ -90,8 +90,8 @@ func runGeneration(g *models.Generation) error {
 	timeoutSeconds := resolveJobTimeoutSeconds(g.Type)
 	log.Printf("[jobs] Using timeoutSeconds=%d for generation %s (type=%s)", timeoutSeconds, g.ID, g.Type)
 
-	// Check if using Gemini API
-	isGeminiAPI := strings.Contains(providerHost, "yunwu.ai") || strings.Contains(providerHost, "gemini") || strings.Contains(providerHost, "google")
+	// Check if using Gemini API (including modelverse.cn)
+	isGeminiAPI := strings.Contains(providerHost, "yunwu.ai") || strings.Contains(providerHost, "gemini") || strings.Contains(providerHost, "google") || strings.Contains(providerHost, "modelverse.cn")
 
 	if isGeminiAPI {
 		return runGeminiGeneration(g, providerHost, apiKey, timeoutSeconds)

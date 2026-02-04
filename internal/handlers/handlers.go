@@ -147,7 +147,7 @@ var supportedModels = []models.ModelInfo{
 		ID:                  "nano-banana-fast",
 		Name:                "Nano Banana Fast",
 		Type:                "image",
-		SupportsImageSize:   true, // 所有图片模型都支持分辨率选择
+		SupportsImageSize:   true,
 		SupportsAspectRatio: true,
 		Tags:                []string{"fast", "1K"},
 	},
@@ -155,7 +155,7 @@ var supportedModels = []models.ModelInfo{
 		ID:                  "nano-banana",
 		Name:                "Nano Banana",
 		Type:                "image",
-		SupportsImageSize:   true, // 所有图片模型都支持分辨率选择
+		SupportsImageSize:   true,
 		SupportsAspectRatio: true,
 		Tags:                []string{"1K"},
 	},
@@ -174,6 +174,14 @@ var supportedModels = []models.ModelInfo{
 		SupportsImageSize:   true,
 		SupportsAspectRatio: true,
 		Tags:                []string{"pro", "vt", "1K/2K/4K"},
+	},
+	{
+		ID:                  "gemini-3-pro-image-preview",
+		Name:                "Gemini 3 Pro Image",
+		Type:                "image",
+		SupportsImageSize:   true,
+		SupportsAspectRatio: true,
+		Tags:                []string{"gemini", "1K/2K/4K"},
 	},
 	{
 		ID:                  "sora-2",
